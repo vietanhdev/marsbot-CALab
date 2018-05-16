@@ -6,6 +6,7 @@
 # s3: current command in command list
 # t7: switch case variable to save case value
 # t6: direction of marsbot by angle (0->355) : init value: 0
+# t0: track: 1; untrack: 0
 
 .eqv MASK_CAUSE_KEYMATRIX 0x00000800 # Bit 11: Key matrix 
 
@@ -55,9 +56,10 @@ main:
 	
 	li $t6, 0
 	
-	li $a0, 180
-	jal ROTATE
-	nop
+	# Untrack by default
+	li $t0, 0
+	
+	jal TURNBACK
 	
 
     #---------------------------------------------------------
@@ -95,17 +97,36 @@ main:
 
     WaitForKey:
     
+    
+    # === Track/Untrack by status flag in $t0: ===
+    nop
+    jal UNTRACK
+    nop
+    beq $t0, $zero, skip_tracking
+    
+    nop
+    jal TRACK
+    nop
+    
+    skip_tracking:
+    # =============================================
+    
     # Move using command from $s6 register
     li $t7, 0
     beq $s6, $t7, case_exe_stop
+    nop
     li $t7, 1
     beq $s6, $t7, case_exe_go
+    nop
     li $t7, 2
     beq $s6, $t7, case_exe_right
+    nop
     li $t7, 3
     beq $s6, $t7, case_exe_left
+    nop
     li $t7, 4
     beq $s6, $t7, case_exe_return
+    nop
 	nop
     b case_exe_default
     nop
@@ -176,7 +197,9 @@ main:
     
     # => Skip for go and stop command
     beq $s6, 0, end_of_exe
+    nop
     beq $s6, 0, end_of_exe
+    nop
     
     
     beq $s1, 0, set_next_to_stop
@@ -285,7 +308,7 @@ main:
     	lw $t2, 4($s4)
     	
     	addi $t2, $t2, -1
-    	beq $t2, $zero, go_to_previous_command
+    	ble $t2, 1, go_to_previous_command
     	nop
     	
     	decrease_count_of_current_command:
@@ -443,18 +466,25 @@ MarsBot_exec_command:
     process_command:
     li $t7, 0x1b4
     beq $t4, $t7, case_start
+    nop
     li $t7, 0xc68
     beq $t4, $t7, case_stop
+    nop
     li $t7, 0x444
     beq $t4, $t7, case_turnleft
+    nop
     li $t7, 0x666
     beq $t4, $t7, case_turnright
+    nop
     li $t7, 0xdad
     beq $t4, $t7, case_track
+    nop
     li $t7, 0xcbc
     beq $t4, $t7, case_untrack
+    nop
     li $t7, 0x999
     beq $t4, $t7, case_return
+    nop
     nop
     b default_move
     nop
@@ -480,20 +510,53 @@ MarsBot_exec_command:
         nop
     case_track:
     
+    
+    	addi $sp,$sp,4 # Save $ra because we may change it later
+    	sw $ra,0($sp)
     	nop
     	jal TRACK
     	nop
     	
+    	# track
+    	li $t0, 1
+    	
+    	lw $ra, 0($sp) # Restore the registers from stack
+    	addi $sp,$sp,-4
+   		nop
+   		
+   		addi $v0, $zero, 4
+    	la $a0, msg_track
+    	nop
+    	syscall
+    	nop
+    	
         b end_of_process
         nop
+        
     case_untrack:
     	
+    	addi $sp,$sp,4 # Save $ra because we may change it later
+    	sw $ra,0($sp)
     	nop
     	jal UNTRACK
+    	
+    	# untrack
+    	li $t0, 0
+    	
+    	nop
+    	lw $ra, 0($sp) # Restore the registers from stack
+    	addi $sp,$sp,-4
+   		nop
+   		
+   		addi $v0, $zero, 4
+    	la $a0, msg_untrack
+    	nop
+    	syscall
     	nop
     	
         b end_of_process
         nop
+        
     case_return:
     	addi $s1, $s6, 0 # save previous command
         li $s6, 4
@@ -572,12 +635,7 @@ TRACK:
 	li $at, LEAVETRACK # change LEAVETRACK port
  	addi $k0, $zero,1 # to logic 1,
  	sb $k0, 0($at) # to start tracking
-	
- 	addi $v0, $zero, 4
-    la $a0, msg_track
-    nop
-    syscall
-    nop
+
  	
  	jr $ra
  	nop
@@ -589,12 +647,6 @@ TRACK:
 UNTRACK:
 	li $at, LEAVETRACK # change LEAVETRACK port to 0
  	sb $zero, 0($at) # to stop drawing tail
- 	
- 	addi $v0, $zero, 4
-    la $a0, msg_untrack
-    nop
-    syscall
-    nop
  	
  	jr $ra
  	nop
@@ -668,7 +720,7 @@ TURNRIGHT:
 # TURN LEFT
 #-------------------------------------------------------------
 TURNLEFT:
-	subi	$t6,$t6,90
+	addi	$t6,$t6,-90
 	addi	$t6,$t6,360
 	li		$k0,360
 	div		$t6,$k0
@@ -697,22 +749,31 @@ show_character:
     
     li $t7, 10
     beq $a0, $t7, case_print_a
+    nop
     li $t7, 11
     beq $a0, $t7, case_print_b
+    nop
     li $t7, 12
     beq $a0, $t7, case_print_c
+    nop
     li $t7, 13
     beq $a0, $t7, case_print_d
+    nop
     li $t7, 1
-    beq $a0, $t7, case_print_1 
+    beq $a0, $t7, case_print_1
+    nop
     li $t7, 4
-    beq $a0, $t7, case_print_4 
+    beq $a0, $t7, case_print_4
+    nop
     li $t7, 6
-    beq $a0, $t7, case_print_6 
+    beq $a0, $t7, case_print_6
+    nop 
     li $t7, 8
     beq $a0, $t7, case_print_8
+    nop
     li $t7, 9
     beq $a0, $t7, case_print_9
+    nop
     nop
     b default_print
     nop
@@ -867,29 +928,41 @@ end_LabSim_get_cod:
 # Decode and process keycode
 LabSim_process_cod:
 
+
+	
+
 	# === DECODE() ===
     li $t7, 0x00000044
     beq $a0, $t7, case_a
+    nop
     li $t7, 0xffffff84
     beq $a0, $t7, case_b
+    nop
     li $t7, 0x00000018
     beq $a0, $t7, case_c
+    nop
     li $t7, 0x00000028
     beq $a0, $t7, case_d
+    nop
     li $t7, 0x00000021
-    beq $a0, $t7, case_1 
+    beq $a0, $t7, case_1
+    nop
     li $t7, 0x00000012
-    beq $a0, $t7, case_4 
+    beq $a0, $t7, case_4
+    nop
     li $t7, 0x00000042
-    beq $a0, $t7, case_6 
+    beq $a0, $t7, case_6
+    nop
     li $t7, 0x00000014
     beq $a0, $t7, case_8
+    nop
     li $t7, 0x00000024
     beq $a0, $t7, case_9
     nop
+    nop
     b default
     case_a:
-        li $a0, 100
+        li $a0, 10
         b push_code_to_keychain
         nop
     case_b:
@@ -977,3 +1050,7 @@ addi $at, $at, 12 # $at = $at + 4 (next instruction)
 mtc0 $at, $14 # Coproc0.$14 = Coproc0.epc <= $at
 li $t9, 1
 eret
+
+
+
+exit:
